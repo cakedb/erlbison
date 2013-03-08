@@ -253,8 +253,8 @@ encode(Value) when is_list(Value) ->
 bson_array([], Result, _Counter) ->
     Result;
 bson_array([{Type,Prefix,Value}|T], Result, Counter) ->
-    bson_array(T, <<Result/binary, Type, Counter, 0, Prefix/binary, Value/binary>>, Counter+1).
-
+    CounterAscii = list_to_binary(integer_to_list(Counter)),
+    bson_array(T, <<Result/binary, Type, CounterAscii/binary, 0, Prefix/binary, Value/binary>>, Counter+1).
 
 % Pop a single element from the Payload
 pop(<<0>>) ->
