@@ -38,6 +38,10 @@ instantiator(_) ->
     Query15 = bson:validate(Query14),
     Query16 = bson:parse(Query14),
 
+    Query14b = bson:filter(Bson, ["some_other_array"]),
+    Query15b = bson:validate(Query14b),
+    Query16b = bson:parse(Query14b),
+
     Query17 = bson:filter(Bson, ["some_binary"]),
     Query18 = bson:validate(Query17),
     Query19 = bson:parse(Query17),
@@ -146,11 +150,7 @@ instantiator(_) ->
     Query99 = bson:fast_search(Bson, [{"some_double" , 87363.343425}]),
     Query100 = bson:fast_search(Bson, [{"some_string" , "HelloWorld"}]),
     Query101 = bson:fast_search(Bson, [{"some_document" , [{"nested","document"}]}]),
-
-    % fast_search doesn't work as of now on arrays because of bson's
-    % arbitrary explicit indexing
-%    Query102 = bson:fast_search(Bson, [{"some_array" , [1, true, "a", null]}]),
-
+    Query102 = bson:fast_search(Bson, [{"some_array" , [1, true, "a", null]}]),
     Query103 = bson:fast_search(Bson, [{"some_binary" , <<"HelloWorld">>}]),
     Query104 = bson:fast_search(Bson, [{"some_ObjectId" , <<(16#5130d8c37603e11f843f9c05):12/unit:8>>}]),
     Query105 = bson:fast_search(Bson, [{"some_bool" , true}]),
@@ -181,7 +181,7 @@ instantiator(_) ->
     Query116 = bson:fast_search(Bson, [{"some_minkey" , minkey}]),
     Query117 = bson:fast_search(Bson, [{"some_maxkey" , maxkey}]),
     Query118 = bson:fast_search(Bson, [{"some_int32" , 1}, {"some_int64", 3000000000}]),
-
+    Query119 = bson:fast_search(Bson, [{"some_other_array" , [0,1,2,3,4,5,6,7,8,9,10,11,12]}]),
 
     [
         ?_assertEqual(Query1, false),
@@ -200,6 +200,9 @@ instantiator(_) ->
 
         ?_assertEqual(Query15, true),
         ?_assertEqual(Query16, [{"some_array", [1,true,"a",null]}]),
+
+        ?_assertEqual(Query15b, true),
+        ?_assertEqual(Query16b, [{"some_other_array", [0,1,2,3,4,5,6,7,8,9,10,11,12]}]),
 
         ?_assertEqual(Query18, true),
         ?_assertEqual(Query19, [{"some_binary", <<"HelloWorld">>}]),
@@ -293,11 +296,7 @@ instantiator(_) ->
         ?_assertEqual(Query99, Bson),
         ?_assertEqual(Query100, Bson),
         ?_assertEqual(Query101, Bson),
-
-        % fast_search doesn't work as of now on arrays because of bson's
-        % arbitrary explicit indexing
-%        ?_assertEqual(Query102, Bson)%,
-
+        ?_assertEqual(Query102, Bson),
         ?_assertEqual(Query103, Bson),
         ?_assertEqual(Query104, Bson),
         ?_assertEqual(Query105, Bson),
@@ -306,7 +305,8 @@ instantiator(_) ->
         ?_assertEqual(Query114, Bson),
         ?_assertEqual(Query116, Bson),
         ?_assertEqual(Query117, Bson),
-        ?_assertEqual(Query118, Bson)
+        ?_assertEqual(Query118, Bson),
+        ?_assertEqual(Query119, Bson)
     ].
         
 cakedb_driver_test_() ->

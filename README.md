@@ -48,7 +48,6 @@ does not support the following types as of now:
 * Timestamp (confused for 32-bits integers)
 * Regex (confused for strings)
 * Javascript code (confused for strings)
-* Arrays (BSON uses arbitrary explicit indices)
 
 Furthermore, certain types might be confused with others:
 
@@ -72,6 +71,6 @@ Comprehensive Eunit tests can be run by running these commands from the root fol
 
 ## TODO
 
+* Make an "explicit" fast_search function (one where the user specify the type seached for, in order to support all types)
 * "In"-documents searches
-* Investigate the arbitrary array indexing
 

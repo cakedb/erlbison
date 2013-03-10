@@ -20,6 +20,7 @@ document = {
             "some_jscodews" : code.Code('document.write("Hello World!")', {"scopevar" : "scopevalue"}),
             "some_int32" : 1,
             "some_timestamp" : timestamp.Timestamp(1361851945,0),
+            "some_other_array" : [0,1,2,3,4,5,6,7,8,9,10,11,12],
             "some_int64" : long(3000000000),
             "some_other_int64" : long(-20),
             "some_minkey" : min_key.MinKey(),
