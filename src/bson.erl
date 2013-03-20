@@ -1,6 +1,6 @@
 -module(bson).
 
--export([load/1, validate/1, parse/1, filter/2, safe_search/2, fast_search/2]).
+-export([load/1, validate/1, parse/1, filter/2, search/2]).
 
 -define(BSON_EOD, 0).
 -define(BSON_DOUBLE, 1).
@@ -56,19 +56,9 @@ filter(?BSON, Keys)->
     Size = size(Result),
     <<(Size+5):32/little-integer, Result:Size/binary, 0>>.
 
-safe_search(?BSON, KeyValues) ->
-    KeyValuesBinary = [{list_to_binary(K), V} || {K,V} <- KeyValues],
-    case match(safe, Payload, KeyValuesBinary) of
-        true->
-            ?BSON;
-        false->
-            ?EMPTY_BSON
-    end.
-
-fast_search(?BSON, KeyValues) ->
-    KeyValuesParsed = [{list_to_binary(K), encode(V)} || {K,V} <- KeyValues],
-    KeyValuesBinary = [{K, V} || {K,{_,_,V}} <- KeyValuesParsed],
-    case match(fast, Payload, KeyValuesBinary) of
+search(?BSON, KeyValues) ->
+    KeyValuesParsed = [{list_to_binary(K), V} || {K,V} <- KeyValues],
+    case match(Payload, KeyValuesParsed) of
         true->
             ?BSON;
         false->
@@ -191,8 +181,8 @@ decode(?BSON_JSCODEWS, <<_:32/little-integer, Payload/binary>>) ->
     CodeString ++ ",{\"" ++ binary_to_list(Key) ++ "\",\"" ++ binary_to_list(E) ++ "\"}";
 decode(?BSON_INT32, <<Value:32/little-signed-integer>>) ->
     Value;
-decode(?BSON_TS, <<_Increment:32, Seconds:32/little-integer>>) ->
-    Seconds;
+decode(?BSON_TS, <<Increment:32/little-integer, Seconds:32/little-integer>>) ->
+    Seconds + Increment;
 decode(?BSON_INT64, <<Value:64/little-signed-integer>>) ->
     Value;
 decode(?BSON_MINKEY, _Value) ->
@@ -202,59 +192,63 @@ decode(?BSON_MAXKEY, _Value) ->
 decode(_, _Value) ->
     {error, corrupted_binary}.
 
-encode(Value) when is_integer(Value) , abs(Value) < 2147483648 -> % 2^31
-    {?BSON_INT32, <<>>, <<Value:32/little-signed-integer>>};
-encode(Value) when is_integer(Value) ->
-    {?BSON_INT64, <<>>, <<Value:64/little-signed-integer>>};
-encode(Value) when is_float(Value) ->
-    {?BSON_DOUBLE, <<>>, <<Value:64/little-signed-float>>};
-encode(true) ->
-    {?BSON_BOOL, <<>>,<<1>>};
-encode(false) ->
-    {?BSON_BOOL, <<>>,<<0>>};
-encode(null) ->
-    {?BSON_NULL, <<>>,<<>>};
-encode(minkey) ->
-    {?BSON_MINKEY, <<>>,<<>>};
-encode(maxkey) ->
-    {?BSON_MAXKEY, <<>>,<<>>};
-encode({Key, Value}) ->
-    {Type, Prefix, Data} = encode(Value),
-    KeyBinary = list_to_binary(Key),
-    Element = <<Type, KeyBinary/binary, 0, Prefix/binary, Data/binary>>,
-    {ignore, <<>>, Element};
-encode(Value=[{_,_}|_]) -> % Nested document
-    Elements = [encode(X) || X <- Value],
-    Payload = list_to_binary([ E || {_T,_P,E} <- Elements ]),
-    Size = byte_size(Payload) + 5,
-    {?BSON_DOCUMENT, <<Size:32/little-integer>>, <<Payload/binary, 0>>};
-encode(Value) when is_binary(Value)->
-    case byte_size(Value) of
-        12 -> % ObjectId
-            {?BSON_OBJECTID, <<>>, Value};
-        _ -> % Binary
-            Size = byte_size(Value),
-            {?BSON_BINARY, <<Size:40/little-integer>>, Value}
-    end;
-encode(Value) when is_list(Value) ->
-    case io_lib:printable_unicode_list(Value) of
-        true -> % String
-            BitString = list_to_binary(Value),
-            Size = byte_size(BitString) + 1,
-            {?BSON_STRING, <<Size:32/little-integer>>, <<BitString/binary,0>>};
-        _ -> % Array
-            Elements = [encode(X) || X <- Value],
-            Payload = bson_array(Elements, <<>>, 0),
-            Size = byte_size(Payload) + 1,
-            {?BSON_ARRAY, <<Size:32/little-integer>>, <<Payload/binary, 0>>}
-    end.
+encode(?BSON_DOUBLE, Value) ->
+    <<Value:64/little-signed-float>>;
+encode(?BSON_STRING, Value) ->
+    BitString = list_to_binary(Value),
+    <<BitString/binary,0>>;
+%encode({Key, Value}) ->
+%    {Type, Prefix, Data} = encode(Value),
+%    KeyBinary = list_to_binary(Key),
+%    <<Type, KeyBinary/binary, 0, Prefix/binary, Data/binary>>;
+%encode(?BSON_DOCUMENT, Value) -> % Nested document
+%    Elements = [encode(X) || X <- Value],
+%    Payload = list_to_binary(Elements),
+%    <<Payload/binary, 0>>;
+%encode(Value) when is_list(Value) ->
+%    Elements = [encode(X) || X <- Value],
+%    Payload = bson_array(Elements, <<>>, 0),
+%    Size = byte_size(Payload) + 1,
+%    {?BSON_ARRAY, <<Size:32/little-integer>>, <<Payload/binary, 0>>};
+encode(?BSON_BINARY, Value) ->
+    Value;
+encode(?BSON_OBJECTID, Value) ->
+    Value;
+encode(?BSON_BOOL, false) ->
+    <<0>>;
+encode(?BSON_BOOL, true) ->
+    <<1>>;
+encode(?BSON_DATETIME, Value) ->
+    <<Value:64/little-signed-integer>>;
+encode(?BSON_NULL, _) ->
+    <<>>;
+encode(?BSON_REGEX, Value) ->
+    list_to_binary(Value);
+encode(?BSON_JSCODE, Value) ->
+    Code = list_to_binary(Value),
+    <<Code/binary,0>>;
+encode(?BSON_JSCODEWS, Value) ->
+    CodeWS = list_to_binary(Value),
+    <<CodeWS/binary,0>>;
+encode(?BSON_INT32, Value) ->
+    <<Value:32/little-signed-integer>>;
+encode(?BSON_TS, Value) ->
+    <<Value:64/little-signed-integer>>;
+encode(?BSON_INT64, Value) ->
+    <<Value:64/little-signed-integer>>;
+encode(?BSON_MINKEY, _) ->
+    <<>>;
+encode(?BSON_MAXKEY, _) ->
+    <<>>.
 
-% [{Type, Prefix, Value}] -> <<Type, Index, 0, Prefix, Value, 0>>
-bson_array([], Result, _Counter) ->
-    Result;
-bson_array([{Type,Prefix,Value}|T], Result, Counter) ->
-    CounterAscii = list_to_binary(integer_to_list(Counter)),
-    bson_array(T, <<Result/binary, Type, CounterAscii/binary, 0, Prefix/binary, Value/binary>>, Counter+1).
+
+
+%% [{Type, Prefix, Value}] -> <<Type, Index, 0, Prefix, Value, 0>>
+%bson_array([], Result, _Counter) ->
+%    Result;
+%bson_array([{Type,Prefix,Value}|T], Result, Counter) ->
+%    CounterAscii = list_to_binary(integer_to_list(Counter)),
+%    bson_array(T, <<Result/binary, Type, CounterAscii/binary, 0, Prefix/binary, Value/binary>>, Counter+1).
 
 % Pop a single element from the Payload
 pop(<<0>>) ->
@@ -296,25 +290,22 @@ filter(Payload, Keys, Result) ->
             filter(Remainder, Keys, Result) 
     end.
 
-match(_Mode, _Payload, []) ->
+match(_Payload, []) ->
     true;
-match(_Mode, <<0>>, _KeysValues) ->
+match(<<0>>, _KeysValues) ->
     false;
-match(safe, Payload, KeyValues) ->
-    {Datatype, Key, Prefix, Value, Remainder} = pop(Payload),
-    KeyValue = {Key, decode(Datatype, <<Prefix/binary, Value/binary>>)},
-    case lists:member(KeyValue, KeyValues) of
-        true ->
-            match(safe, Remainder, lists:delete(KeyValue, KeyValues));
+match(Payload, KeyValues) ->
+    {Datatype, Key, _Prefix, Value, Remainder} = pop(Payload),
+    case lists:keyfind(Key, 1, KeyValues) of
+        {Key, Query} ->
+            io:format(user, "~nDatatype: ~p, Value: ~p, Query: ~p~n", [Datatype, Value, encode(Datatype, Query)]),
+            case encode(Datatype, Query) of
+                Value ->
+                    match(Remainder, lists:delete({Key, Query}, KeyValues));
+                _ -> 
+                    match(Remainder, KeyValues)
+            end;
         false ->
-            match(safe, Remainder, KeyValues)
-    end;
-match(fast, Payload, KeyValues) ->
-    {_Datatype, Key, _Prefix, Value, Remainder} = pop(Payload),
-    case lists:member({Key, Value}, KeyValues) of
-        true ->
-            match(fast, Remainder, lists:delete({Key, Value}, KeyValues));
-        false ->
-            match(fast, Remainder, KeyValues)
+            match(Remainder, KeyValues)
     end.
 
