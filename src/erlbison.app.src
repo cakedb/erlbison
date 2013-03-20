@@ -6,6 +6,6 @@
   {applications, [
                   kernel,
                   stdlib
-                 ]},
+                 ]}
  }
  ]}.
