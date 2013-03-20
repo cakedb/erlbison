@@ -1,11 +1,12 @@
 {application, erlbison,
  [
   {description, "High performance validation / search and filter library"},
-  {vsn, "1"},
+  {vsn, "1.0.1"},
   {registered, []},
   {applications, [
                   kernel,
                   stdlib
-                 ]}
- }
+                 ]},
+  {env, []},
+  {modules, [bson]}
  ]}.
