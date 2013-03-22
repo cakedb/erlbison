@@ -71,6 +71,7 @@ search(?BSON, KeyValues) ->
 
 get_key(Data) ->
     get_key(Data,<<>>).
+
 get_key(<<0, Remainder/binary>>, Key) ->
     {Key, Remainder};
 get_key(<<Char, Remainder/binary>>, Key) ->
@@ -168,21 +169,19 @@ decode(?BSON_JSCODEWS, <<_:32/little-integer, Payload/binary>>) ->
     <<CodeLength:32/little-integer, A:CodeLength/binary, Scope/binary>> = Payload,
     CodeSize = CodeLength - 1,
     <<Code:CodeSize/binary, _/binary>> = A,
-    CodeString = binary_to_list(Code),
 
     % Parse scope 
     {_, <<_:1/binary, C/binary>>, _} = chop(inclusive, 32, Scope),
-    {Key, Value} = get_key(C),
+    {ScopeID, Value} = get_key(C),
     {<<Length:32/little-integer>>, D, _} = chop(exclusive, 32, Value),
     Size = Length -1,
-    <<E:Size/binary, _/binary>> = D,
+    <<ScopeValue:Size/binary, _/binary>> = D,
 
-    % Concatenate Code and Scope
-    CodeString ++ ",{\"" ++ binary_to_list(Key) ++ "\",\"" ++ binary_to_list(E) ++ "\"}";
+    {binary_to_list(Code), binary_to_list(ScopeID), binary_to_list(ScopeValue)};
 decode(?BSON_INT32, <<Value:32/little-signed-integer>>) ->
     Value;
 decode(?BSON_TS, <<Increment:32/little-integer, Seconds:32/little-integer>>) ->
-    Seconds + Increment;
+    {Increment, Seconds};
 decode(?BSON_INT64, <<Value:64/little-signed-integer>>) ->
     Value;
 decode(?BSON_MINKEY, _Value) ->
@@ -227,21 +226,25 @@ encode(?BSON_REGEX, Value) ->
 encode(?BSON_JSCODE, Value) ->
     Code = list_to_binary(Value),
     <<Code/binary,0>>;
-encode(?BSON_JSCODEWS, Value) ->
-    CodeWS = list_to_binary(Value),
-    <<CodeWS/binary,0>>;
+encode(?BSON_JSCODEWS, {Code, ScopeID, ScopeValue}) ->
+    CodeBinary = list_to_binary(Code),
+    LengthCode = size(CodeBinary) + 1,
+    ScopeIDBinary = list_to_binary(ScopeID),
+    ScopeValueBinary = list_to_binary(ScopeValue),
+    LengthValue = size(ScopeValueBinary) + 1,
+    Temp = <<2, ScopeIDBinary/binary, 0, LengthValue:32/little-integer, ScopeValueBinary/binary, 0, 0>>,
+    Length = size(Temp) + 4,
+    <<LengthCode:32/little-integer, CodeBinary/binary, 0, Length:32/little-integer, Temp/binary>>;
 encode(?BSON_INT32, Value) ->
     <<Value:32/little-signed-integer>>;
-encode(?BSON_TS, Value) ->
-    <<Value:64/little-signed-integer>>;
+encode(?BSON_TS, {Increment, Seconds}) ->
+    <<Increment:32/little-integer, Seconds:32/little-integer>>;
 encode(?BSON_INT64, Value) ->
     <<Value:64/little-signed-integer>>;
 encode(?BSON_MINKEY, _) ->
     <<>>;
 encode(?BSON_MAXKEY, _) ->
     <<>>.
-
-
 
 %% [{Type, Prefix, Value}] -> <<Type, Index, 0, Prefix, Value, 0>>
 %bson_array([], Result, _Counter) ->
@@ -298,7 +301,6 @@ match(Payload, KeyValues) ->
     {Datatype, Key, _Prefix, Value, Remainder} = pop(Payload),
     case lists:keyfind(Key, 1, KeyValues) of
         {Key, Query} ->
-            io:format(user, "~nDatatype: ~p, Value: ~p, Query: ~p~n", [Datatype, Value, encode(Datatype, Query)]),
             case encode(Datatype, Query) of
                 Value ->
                     match(Remainder, lists:delete({Key, Query}, KeyValues));

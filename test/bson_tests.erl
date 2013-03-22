@@ -58,6 +58,10 @@ instantiator(_) ->
     Query27 = bson:validate(Query26),
     Query28 = bson:parse(Query26),
 
+    Query101 = bson:filter(Bson, ["some_other_datetime"]),
+    Query102 = bson:validate(Query101),
+    Query103 = bson:parse(Query101),
+
     Query29 = bson:filter(Bson, ["some_null"]),
     Query30 = bson:validate(Query29),
     Query31 = bson:parse(Query29),
@@ -85,6 +89,10 @@ instantiator(_) ->
     Query47 = bson:filter(Bson, ["some_timestamp"]),
     Query48 = bson:validate(Query47),
     Query49 = bson:parse(Query47),
+
+    Query98 = bson:filter(Bson, ["some_other_timestamp"]),
+    Query99 = bson:validate(Query98),
+    Query100 = bson:parse(Query98),
 
     Query50 = bson:filter(Bson, ["some_int64"]),
     Query51 = bson:validate(Query50),
@@ -133,7 +141,7 @@ instantiator(_) ->
     Query87 = bson:search(Bson, [{"some_regex" , "a*b?c\\?"}]),
     Query88 = bson:search(Bson, [{"some_other_regex" , "(?:\\+?1\\s*(?:[.-]\\s*)?)"}]),
     Query89 = bson:search(Bson, [{"some_jscode" , "document.write(\"Hello World!\")"}]),
-    Query90 = bson:search(Bson, [{"some_jscodews" , "document.write(\"Hello World!\"),{\"scopevar\",\"scopevalue\"}"}]),
+    Query90 = bson:search(Bson, [{"some_jscodews" , {"document.write(\"Hello World!\")","scopeID","scopevalue"}}]),
     Query91 = bson:search(Bson, [{"some_int32" , 1}]),
     Query92 = bson:search(Bson, [{"some_timestamp" , {0,1361851945}}]),
     Query93 = bson:search(Bson, [{"some_int64" , 3000000000}]),
@@ -175,6 +183,9 @@ instantiator(_) ->
         ?_assertEqual(Query27, true),
         ?_assertEqual(Query28, [{"some_datetime", 1362141030000}]),
 
+        ?_assertEqual(Query102, true),
+        ?_assertEqual(Query103, [{"some_other_datetime", 557460184123}]),
+
         ?_assertEqual(Query30, true),
         ?_assertEqual(Query31, [{"some_null", null}]),
 
@@ -188,13 +199,16 @@ instantiator(_) ->
         ?_assertEqual(Query40, [{"some_jscode", "document.write(\"Hello World!\")"}]),
 
         ?_assertEqual(Query42, true),
-        ?_assertEqual(Query43, [{"some_jscodews", "document.write(\"Hello World!\"),{\"scopevar\",\"scopevalue\"}"}]),
+        ?_assertEqual(Query43, [{"some_jscodews", {"document.write(\"Hello World!\")","scopeID","scopevalue"}}]),
 
         ?_assertEqual(Query45, true),
         ?_assertEqual(Query46, [{"some_int32", 1}]),
 
         ?_assertEqual(Query48, true),
-        ?_assertEqual(Query49, [{"some_timestamp", 1361851945}]),
+        ?_assertEqual(Query49, [{"some_timestamp", {0, 1361851945}}]),
+
+        ?_assertEqual(Query99, true),
+        ?_assertEqual(Query100, [{"some_other_timestamp", {123456, 1361851945}}]),
 
         ?_assertEqual(Query51, true),
         ?_assertEqual(Query52, [{"some_int64", 3000000000}]),
@@ -209,7 +223,7 @@ instantiator(_) ->
         ?_assertEqual(Query61, [{"some_maxkey", maxkey}]),
 
         ?_assertEqual(Query63, true),
-        ?_assertEqual(Query64, [{"some_int32", 1},{"some_double", 87363.343425}]),
+        ?_assertEqual(lists:sort(Query64), lists:sort([{"some_int32", 1},{"some_double", 87363.343425}])),
 
         ?_assertEqual(Query66, true),
         ?_assertEqual(Query67, [{"some_int32", 1}]),
