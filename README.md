@@ -45,6 +45,6 @@ Comprehensive Eunit tests can be run by running these commands from the root fol
 
 ## TODO
 
-* Have search/2 supports arrays and nested BSON documents
+* More thorough testing, especially with JSCODEWS type
 * "In"-documents searches
 

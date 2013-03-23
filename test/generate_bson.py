@@ -8,6 +8,8 @@ document = {
             "some_double" : 87363.343425,
             "some_string" : "HelloWorld",
             "some_document" : {"nested":"document"},
+            "some_nested_document" : {"doc1":{"doc2":"stuff"}},
+            "some_other_document" : {"a":1, "b":2},
             "some_array" : [1, True, "a", None],
             "some_binary" : binary.Binary("HelloWorld"),
             "some_ObjectId" : objectid.ObjectId('5130d8c37603e11f843f9c05'),

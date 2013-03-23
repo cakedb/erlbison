@@ -2,6 +2,7 @@
 
 -export([load/1, validate/1, parse/1, filter/2, search/2]).
 
+% BSON types
 -define(BSON_EOD, 0).
 -define(BSON_DOUBLE, 1).
 -define(BSON_STRING, 2).
@@ -58,10 +59,12 @@ filter(?BSON, Keys)->
 
 search(?BSON, KeyValues) ->
     KeyValuesParsed = [{list_to_binary(K), V} || {K,V} <- KeyValues],
-    case match(Payload, KeyValuesParsed) of
-        true->
+    case compare(Payload, KeyValuesParsed) of
+        same->
             ?BSON;
-        false->
+        subset->
+            ?BSON;
+        _ ->
             ?EMPTY_BSON
     end.
 
@@ -69,6 +72,8 @@ search(?BSON, KeyValues) ->
 %%% PRIVATE FUNCTIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% get_key chops of the key out of a BSON binary
+% and returns it with the remainder of the binary
 get_key(Data) ->
     get_key(Data,<<>>).
 
@@ -77,8 +82,16 @@ get_key(<<0, Remainder/binary>>, Key) ->
 get_key(<<Char, Remainder/binary>>, Key) ->
     get_key(Remainder, <<Key/binary, Char>>);
 get_key(<<>>, _Key) ->
-    {error, cant_get_key}.
+    error.
 
+% chop bites off a number of bits from
+% the front of a binary. It deals with three cases
+% (i) when the number of bits to chop is
+% encoded at the front of the binary, including
+% itself, (ii) when the number of bits to
+% chop is encoded at the front of the binary,
+% excluding itself and (iii) when the number
+% of bites is predefined by the caller.
 chop(inclusive, Bits, Payload) ->
     <<Size:Bits/little-integer, Rest/binary>> = Payload,
     Length = Size - 4,
@@ -92,14 +105,21 @@ chop(Size, Payload) ->
     <<Value:Size/binary, Remainder/binary>> = Payload,
     {<<>>, Value, Remainder}.
 
+% get_value/2 takes a integer representing
+% a BSON datatype, as well as a binary,
+% and return a 3-tuple of binaries holding
+% (i) the size of the value, (ii) the value
+% itself and (iii) the "tail" of the binary.
 get_value(?BSON_DOUBLE, Payload) ->
     chop(8, Payload);
 get_value(?BSON_STRING, Payload) ->
     chop(exclusive, 32, Payload);
 get_value(?BSON_DOCUMENT, Payload) ->
-    chop(inclusive, 32, Payload);
+    {Prefix, Value, Remainder} = chop(inclusive, 32, Payload),
+    {<<>>, <<Prefix/binary, Value/binary>>, Remainder};
 get_value(?BSON_ARRAY, Payload) ->
-    chop(inclusive, 32, Payload);
+    {Prefix, Value, Remainder} = chop(inclusive, 32, Payload),
+    {<<>>, <<Prefix/binary, Value/binary>>, Remainder};
 get_value(?BSON_BINARY, Payload) ->
     chop(exclusive, 40, Payload);
 get_value(?BSON_OBJECTID, Payload) ->
@@ -133,8 +153,12 @@ get_value(?BSON_MINKEY, Payload) ->
 get_value(?BSON_MAXKEY, Payload) ->
     chop(0, Payload);
 get_value(_, _Payload) ->
-    {error, error, unrecognized_datatype}.
+    error.
 
+% decode/2 takes an integer representing
+% a BSON datatype as well a a binary
+% and translate this binary into a native
+% Erlang type.
 decode(?BSON_DOUBLE, <<Double:64/little-signed-float>>) ->
     Double;
 decode(?BSON_STRING, <<Length:32/little-integer, Payload:Length/binary>>) ->
@@ -189,26 +213,18 @@ decode(?BSON_MINKEY, _Value) ->
 decode(?BSON_MAXKEY, _Value) ->
     maxkey;
 decode(_, _Value) ->
-    {error, corrupted_binary}.
+    error.
 
+% encode/2 takes an integer representing
+% a BSON datatype as well a value 
+% represented inside a native Erlang
+% datatype and encode it to a binary
+% according to the BSON specs
 encode(?BSON_DOUBLE, Value) ->
     <<Value:64/little-signed-float>>;
 encode(?BSON_STRING, Value) ->
     BitString = list_to_binary(Value),
     <<BitString/binary,0>>;
-%encode({Key, Value}) ->
-%    {Type, Prefix, Data} = encode(Value),
-%    KeyBinary = list_to_binary(Key),
-%    <<Type, KeyBinary/binary, 0, Prefix/binary, Data/binary>>;
-%encode(?BSON_DOCUMENT, Value) -> % Nested document
-%    Elements = [encode(X) || X <- Value],
-%    Payload = list_to_binary(Elements),
-%    <<Payload/binary, 0>>;
-%encode(Value) when is_list(Value) ->
-%    Elements = [encode(X) || X <- Value],
-%    Payload = bson_array(Elements, <<>>, 0),
-%    Size = byte_size(Payload) + 1,
-%    {?BSON_ARRAY, <<Size:32/little-integer>>, <<Payload/binary, 0>>};
 encode(?BSON_BINARY, Value) ->
     Value;
 encode(?BSON_OBJECTID, Value) ->
@@ -246,14 +262,12 @@ encode(?BSON_MINKEY, _) ->
 encode(?BSON_MAXKEY, _) ->
     <<>>.
 
-%% [{Type, Prefix, Value}] -> <<Type, Index, 0, Prefix, Value, 0>>
-%bson_array([], Result, _Counter) ->
-%    Result;
-%bson_array([{Type,Prefix,Value}|T], Result, Counter) ->
-%    CounterAscii = list_to_binary(integer_to_list(Counter)),
-%    bson_array(T, <<Result/binary, Type, CounterAscii/binary, 0, Prefix/binary, Value/binary>>, Counter+1).
-
-% Pop a single element from the Payload
+% pop takes a single element off the payload
+% binary and returns a 5-tuple of the binary
+% with (i) the element's BSON datatype,
+% (ii) key, (iii) prefix (often the length
+% of the value binary), (iv) the value and
+% (v) the binary's "tail"
 pop(<<0>>) ->
     eod;
 pop(<<Datatype, Payload/binary>>) ->
@@ -261,6 +275,8 @@ pop(<<Datatype, Payload/binary>>) ->
     {Prefix, Value, Remainder} = get_value(Datatype, Rest),
     {Datatype, Key, Prefix, Value, Remainder}.
 
+% validate/2 returns a boolean whether a binary
+% is formed according to the BSON specs or not
 validate(payload, Payload) ->
     case pop(Payload) of
         eod->
@@ -273,12 +289,17 @@ validate(payload, Payload) ->
             validate(payload, Remainder)
     end.
 
+% parse/2 returns a native Erlang proplist containing
+% the keyvalue elements inside a BSON binary
 parse(<<0>>, List) ->
     List;
 parse(Payload, List) ->
     {Datatype, Key, Prefix, Value, Remainder} = pop(Payload),
     parse(Remainder, [{binary_to_list(Key), decode(Datatype, <<Prefix/binary, Value/binary>>)} | List]).
 
+% filter/3 takes a binary holding BSON arguments as
+% well as a list of keys and returns the subset of
+% elements having the predefined keys
 filter(<<0>>, _Keys, Result) ->
     Result;
 filter(_Payload, [], Result) ->
@@ -293,21 +314,70 @@ filter(Payload, Keys, Result) ->
             filter(Remainder, Keys, Result) 
     end.
 
-match(_Payload, []) ->
-    true;
-match(<<0>>, _KeysValues) ->
-    false;
-match(Payload, KeyValues) ->
+% compare/2 takes a binary containing BSON elements
+% as well as a proplist of keyvalues and returns
+% whether the proplist is conceptually the same
+% as the BSON, a subset of the BSON, or different
+compare(<<0>>, []) ->
+    same;
+compare(_Payload, []) ->
+    subset;
+compare(<<0>>, _KeysValues) ->
+    different;
+compare(Payload, KeyValues) ->
     {Datatype, Key, _Prefix, Value, Remainder} = pop(Payload),
     case lists:keyfind(Key, 1, KeyValues) of
         {Key, Query} ->
-            case encode(Datatype, Query) of
-                Value ->
-                    match(Remainder, lists:delete({Key, Query}, KeyValues));
-                _ -> 
-                    match(Remainder, KeyValues)
+            case equal(Datatype, Query, Value) of
+                true ->
+                    compare(Remainder, lists:delete({Key, Query}, KeyValues));
+                false ->
+                    compare(Remainder, KeyValues)
             end;
         false ->
-            match(Remainder, KeyValues)
+            compare(Remainder, KeyValues)
+    end.
+
+% equal/3 takes a datatype, a query
+% (in native Erlang type) and a value
+% (in binary BSON) and returns a boolean
+% whether the query and the value are
+% the same
+equal(?BSON_DOCUMENT, KeyValues, ?BSON) ->
+    KeyValuesParsed = [{list_to_binary(K), V} || {K,V} <- KeyValues],
+    case compare(Payload, KeyValuesParsed) of
+        same ->
+            true;
+        _ ->
+            false
+    end;
+equal(?BSON_ARRAY, Array, ?BSON) ->
+    compare(array, Array, Payload);
+equal(Datatype, Query, Value) ->
+    case encode(Datatype, Query) of
+        Value ->
+            true;
+        _ ->
+            false
+    end.
+
+% compare/3 takes a native Erlang
+% array as well as a BSON-encoded
+% array and returns a boolean
+% indicating whether they are
+% conceptually the same
+compare(array, [], <<0>>) ->
+    true;
+compare(array, _Query, <<0>>) ->
+    false;
+compare(array, [], _Payload) ->
+    false;
+compare(array, [Hd|Tl], Payload) ->
+    {Datatype, _Key, _Prefix, Value, Remainder} = pop(Payload),
+    case encode(Datatype, Hd) of
+        Value ->
+            compare(array, Tl, Remainder);
+        _ ->
+            false
     end.
 
