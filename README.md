@@ -20,14 +20,14 @@ returns the atom `true` or `false` depending if binary Foo has proper BSON forma
 
 `Baz = bson:parse(Foo).`
 
-returns a proplist with the parsed content of BSON binary Foo.
+returns a native Erlang proplist with the parsed content of BSON binary Foo.
 
 `Bing = bson:filter(Foo, [Key1, ..., KeyN]).`
 
 returns a subset of FOO (a proper BSON binary) that contains strictly the elements identified by
 the keys contained in the list in the second argument of `bson:filter/2`.
 
-`Bong = bson:search(Foo, [{Key1, Value1}, ..., {KeyN, ValueN}]).`
+`Foo = bson:search(Foo, [{Key1, Value1}, ..., {KeyN, ValueN}]).`
 
 returns the BSON Foo if and only if it contains all the key-value pairs listed in its second argument.
 
