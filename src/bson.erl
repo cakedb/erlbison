@@ -57,14 +57,12 @@ filter(?BSON, Keys)->
     Size = size(Result),
     <<(Size+5):32/little-integer, Result:Size/binary, 0>>.
 
-search(?BSON, KeyValues) ->
-    KeyValuesParsed = [{list_to_binary(K),V} || {K,V} <- KeyValues],
-    case compare(Payload, KeyValuesParsed) of
-        same->
+search(?BSON, Queries) ->
+    QueriesParsed = [{list_to_binary(K),V} || {K,V} <- Queries],
+    case satisfies(Payload, QueriesParsed) of
+        true ->
             ?BSON;
-        subset->
-            ?BSON;
-        _ ->
+        false ->
             ?EMPTY_BSON
     end.
 
@@ -314,28 +312,29 @@ filter(Payload, Keys, Result) ->
             filter(Remainder, Keys, Result) 
     end.
 
-% compare/2 takes a binary containing BSON elements
-% as well as a proplist of keyvalues and returns
-% whether the proplist is conceptually the same
-% as the BSON, a subset of the BSON, or different
-compare(<<0>>, []) ->
-    same;
-compare(_Payload, []) ->
-    subset;
-compare(<<0>>, _KeysValues) ->
-    different;
-compare(Payload, KeyValues) ->
+% satisfies/2 takes a binary containing BSON elements
+% as well as a proplist of queries. The queries are
+% either {key, value} or {key, lambda} where lambda
+% is a function with arity of one which returns a boolean
+satisfies(_Payload, []) ->
+    true;
+satisfies(<<0>>, _Queries) ->
+    false;
+satisfies(Payload, Queries) ->
     {Datatype, Key, _Prefix, Value, Remainder} = pop(Payload),
-    case lists:keyfind(Key, 1, KeyValues) of
-        {Key, Query} ->
-            case equal(Datatype, Query, Value) of
+    case lists:keyfind(Key, 1, Queries) of
+        {Key, Comparator} when is_function(Comparator) ->
+            % MORE WORKS NEED TO BE DONE HERE
+            satisfies(Remainder, lists:delete({Key, Comparator}, Queries));
+        {Key, Val} ->
+            case equal(Datatype, Val, Value) of
                 true ->
-                    compare(Remainder, lists:delete({Key, Query}, KeyValues));
+                    satisfies(Remainder, lists:delete({Key, Val}, Queries));
                 false ->
-                    compare(Remainder, KeyValues)
+                    satisfies(Remainder, Queries)
             end;
         false ->
-            compare(Remainder, KeyValues)
+            satisfies(Remainder, Queries)
     end.
 
 % equal/3 takes a datatype, a query
@@ -345,14 +344,10 @@ compare(Payload, KeyValues) ->
 % the same
 equal(?BSON_DOCUMENT, KeyValues, ?BSON) ->
     KeyValuesParsed = [{list_to_binary(K), V} || {K,V} <- KeyValues],
-    case compare(Payload, KeyValuesParsed) of
-        same ->
-            true;
-        _ ->
-            false
-    end;
+    % MORE WORK HERE FOR DOCUMENTS OF DIFF. LENGTH
+    satisfies(Payload, KeyValuesParsed);
 equal(?BSON_ARRAY, Array, ?BSON) ->
-    compare(array, Array, Payload);
+    compare(Array, Payload);
 equal(Datatype, Query, Value) ->
     case encode(Datatype, Query) of
         Value ->
@@ -361,22 +356,22 @@ equal(Datatype, Query, Value) ->
             false
     end.
 
-% compare/3 takes a native Erlang
+% compare/2 takes a native Erlang
 % array as well as a BSON-encoded
 % array and returns a boolean
 % indicating whether they are
 % conceptually the same
-compare(array, [], <<0>>) ->
+compare([], <<0>>) ->
     true;
-compare(array, _Query, <<0>>) ->
+compare(_Query, <<0>>) ->
     false;
-compare(array, [], _Payload) ->
+compare([], _Payload) ->
     false;
-compare(array, [Hd|Tl], Payload) ->
+compare([Hd|Tl], Payload) ->
     {Datatype, _Key, _Prefix, Value, Remainder} = pop(Payload),
     case encode(Datatype, Hd) of
         Value ->
-            compare(array, Tl, Remainder);
+            compare(Tl, Remainder);
         _ ->
             false
     end.

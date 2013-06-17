@@ -136,11 +136,9 @@ instantiator(_) ->
     Query73 = bson:search(Bson, [{"some_int",3}]),
     Shorter = bson:search(Bson, [{"some_other_array",[0,1,2,3,4,5,6,7,8,9,10,11]}]),
     Longer = bson:search(Bson, [{"some_other_array",[0,1,2,3,4,5,6,7,8,9,10,11,12,13]}]),
-%    SubQuery1 = {"some_int",fun(X)->X<0 end},
-%    SubQuery2 = {"some_double",fun(X)->X==-233.22 end},
-%    Query98 = bson:search(Bson, [SubQuery1,SubQuery2]),
-%    Query99 = bson:search(Bson, [{"some_garbage",fun(_X)->true end}]),
-%    Query100 = bson:search(Bson, [{"some_int",fun(X)->X rem 2 == 0 end, scruff}]),
+    Query98 = bson:search(Bson, [{"some_int",fun(X)->X<0 end},{"some_double",fun(X)->X==-233.22 end}]),
+    Query99 = bson:search(Bson, [{"some_garbage",fun(_X)->true end}]),
+    Query100 = bson:search(Bson, [{"some_int",fun(X)->X rem 2 == 0 end}]),
 
     % Search - Matches
     Query77 = bson:search(Bson, []),
@@ -168,6 +166,19 @@ instantiator(_) ->
     Query95 = bson:search(Bson, [{"some_minkey" , minkey}]),
     Query96 = bson:search(Bson, [{"some_maxkey" , maxkey}]),
     Query97 = bson:search(Bson, [{"some_int32" , 1}, {"some_int64", 3000000000}]),
+
+    Query101 = bson:search(Bson, [{"some_double" , fun(X)->X>10000 end}]),
+
+    Query102 = bson:search(Bson, [{"some_string" , fun(X)->string:len(X)==10 end}]),
+
+    Query103 = bson:search(Bson, [{"some_document" , fun(X)->proplists:is_defined("some_document",X) end}]),
+
+    Query104 = bson:search(Bson, [{"some_array" , fun(X) -> lists:nth(0, X) =< 0.5 end}]),
+
+    Query105 = bson:search(Bson, [{"some_other_datetime" , fun(X)->X>557460184000 end}]),
+
+    Query106 = bson:search(Bson, [{"some_int32" , fun(X)->X<2 end}]),
+    Query107 = bson:search(Bson, [{"some_other_array" , fun(X)->lists:nth(8, X) rem 2 == 0 end}]),
 
     [
         ?_assertEqual(Query1, false),
@@ -262,6 +273,9 @@ instantiator(_) ->
         ?_assertEqual(Query73, ?EMPTY_BSON),
         ?_assertEqual(Shorter, ?EMPTY_BSON),
         ?_assertEqual(Longer, ?EMPTY_BSON),
+        ?_assertEqual(Query98, ?EMPTY_BSON),
+        ?_assertEqual(Query99, ?EMPTY_BSON),
+        ?_assertEqual(Query100, ?EMPTY_BSON),
         
         % Matches - search
         ?_assertEqual(Query77, Bson),
@@ -288,7 +302,15 @@ instantiator(_) ->
         ?_assertEqual(Query94, Bson),
         ?_assertEqual(Query95, Bson),
         ?_assertEqual(Query96, Bson),
-        ?_assertEqual(Query97, Bson)
+        ?_assertEqual(Query97, Bson),
+
+        ?_assertEqual(Query101, Bson),
+        ?_assertEqual(Query102, Bson),
+        ?_assertEqual(Query103, Bson),
+        ?_assertEqual(Query104, Bson),
+        ?_assertEqual(Query105, Bson),
+        ?_assertEqual(Query106, Bson),
+        ?_assertEqual(Query107, Bson)
     ].
         
 cakedb_driver_test_() ->
