@@ -130,14 +130,19 @@ instantiator(_) ->
     Query69 = bson:validate(Query68),
     Query70 = bson:parse(Query68),
 
-    % No match
+    % Search - No match
     Query71 = bson:search(Bson, [{"some_int",1}, {"some_double",-233.22}]),
     Query72 = bson:search(Bson, [{"some_garbage",1}]),
     Query73 = bson:search(Bson, [{"some_int",3}]),
     Shorter = bson:search(Bson, [{"some_other_array",[0,1,2,3,4,5,6,7,8,9,10,11]}]),
     Longer = bson:search(Bson, [{"some_other_array",[0,1,2,3,4,5,6,7,8,9,10,11,12,13]}]),
+%    SubQuery1 = {"some_int",fun(X)->X<0 end},
+%    SubQuery2 = {"some_double",fun(X)->X==-233.22 end},
+%    Query98 = bson:search(Bson, [SubQuery1,SubQuery2]),
+%    Query99 = bson:search(Bson, [{"some_garbage",fun(_X)->true end}]),
+%    Query100 = bson:search(Bson, [{"some_int",fun(X)->X rem 2 == 0 end, scruff}]),
 
-    % Matches
+    % Search - Matches
     Query77 = bson:search(Bson, []),
     Query78 = bson:search(Bson, [{"some_double" , 87363.343425}]),
     Query79 = bson:search(Bson, [{"some_string" , "HelloWorld"}]),

@@ -58,7 +58,7 @@ filter(?BSON, Keys)->
     <<(Size+5):32/little-integer, Result:Size/binary, 0>>.
 
 search(?BSON, KeyValues) ->
-    KeyValuesParsed = [{list_to_binary(K), V} || {K,V} <- KeyValues],
+    KeyValuesParsed = [{list_to_binary(K),V} || {K,V} <- KeyValues],
     case compare(Payload, KeyValuesParsed) of
         same->
             ?BSON;
