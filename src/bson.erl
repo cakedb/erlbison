@@ -98,7 +98,6 @@ chop(inclusive, Bits, Payload) ->
 chop(exclusive, Bits, Payload) ->
     <<Length:Bits/little-integer, Value:Length/binary, Remainder/binary>> = Payload,
     {<<Length:Bits/little-integer>>, Value, Remainder}.
-
 chop(Size, Payload) ->
     <<Value:Size/binary, Remainder/binary>> = Payload,
     {<<>>, Value, Remainder}.
@@ -111,7 +110,10 @@ chop(Size, Payload) ->
 get_value(?BSON_DOUBLE, Payload) ->
     chop(8, Payload);
 get_value(?BSON_STRING, Payload) ->
-    chop(exclusive, 32, Payload);
+    {<<Length:32/little-integer>>, Value, Remainder} = chop(exclusive, 32, Payload),
+    Size = Length-1,
+    <<String:Size/binary, 0>> = Value,
+    {<<Size:32/little-integer>>, String, Remainder};
 get_value(?BSON_DOCUMENT, Payload) ->
     {Prefix, Value, Remainder} = chop(inclusive, 32, Payload),
     {<<>>, <<Prefix/binary, Value/binary>>, Remainder};
@@ -271,6 +273,7 @@ pop(<<0>>) ->
 pop(<<Datatype, Payload/binary>>) ->
     {Key, Rest} = get_key(Payload),
     {Prefix, Value, Remainder} = get_value(Datatype, Rest),
+    io:format(user, "~n~p ~p~n", [Datatype, Value]),
     {Datatype, Key, Prefix, Value, Remainder}.
 
 % validate/2 returns a boolean whether a binary
@@ -323,18 +326,22 @@ satisfies(<<0>>, _Queries) ->
 satisfies(Payload, Queries) ->
     {Datatype, Key, _Prefix, Value, Remainder} = pop(Payload),
     case lists:keyfind(Key, 1, Queries) of
+        false ->
+            satisfies(Remainder, Queries);
         {Key, Comparator} when is_function(Comparator) ->
-            % MORE WORKS NEED TO BE DONE HERE
-            satisfies(Remainder, lists:delete({Key, Comparator}, Queries));
+            case Comparator(decode(Datatype, Value)) of
+                true ->
+                    satisfies(Remainder, lists:delete({Key, Comparator}, Queries));
+                false ->
+                    satisfies(Remainder, Queries)
+            end;
         {Key, Val} ->
             case equal(Datatype, Val, Value) of
                 true ->
                     satisfies(Remainder, lists:delete({Key, Val}, Queries));
                 false ->
                     satisfies(Remainder, Queries)
-            end;
-        false ->
-            satisfies(Remainder, Queries)
+            end
     end.
 
 % equal/3 takes a datatype, a query
@@ -343,35 +350,43 @@ satisfies(Payload, Queries) ->
 % whether the query and the value are
 % the same
 equal(?BSON_DOCUMENT, KeyValues, ?BSON) ->
-    KeyValuesParsed = [{list_to_binary(K), V} || {K,V} <- KeyValues],
-    % MORE WORK HERE FOR DOCUMENTS OF DIFF. LENGTH
-    satisfies(Payload, KeyValuesParsed);
+    compare(document, KeyValues, Payload);
 equal(?BSON_ARRAY, Array, ?BSON) ->
-    compare(Array, Payload);
+    compare(array, Array, Payload);
 equal(Datatype, Query, Value) ->
-    case encode(Datatype, Query) of
-        Value ->
-            true;
-        _ ->
-            false
-    end.
+    encode(Datatype, Query) == Value.
 
-% compare/2 takes a native Erlang
-% array as well as a BSON-encoded
-% array and returns a boolean
+% compare/3 takes a native Erlang
+% list (or proplist) as well as a
+% BSON-encoded array (or document)
+% and returns a boolean
 % indicating whether they are
 % conceptually the same
-compare([], <<0>>) ->
+compare(document, [], <<0>>) ->
     true;
-compare(_Query, <<0>>) ->
+compare(document, _KeyValues, <<0>>) ->
     false;
-compare([], _Payload) ->
+compare(document, [], _Payload) ->
     false;
-compare([Hd|Tl], Payload) ->
+compare(document, KeyValues, Payload) ->
+    {_Datatype, Key, _Prefix, Value, Remainder} = pop(Payload),
+    case lists:member({Key, Value}, KeyValues) of
+        true ->
+            compare(document, lists:delete({Key, Value}, KeyValues), Remainder);
+        false ->
+            false
+    end;
+compare(array, [], <<0>>) ->
+    true;
+compare(array, _Query, <<0>>) ->
+    false;
+compare(array, [], _Payload) ->
+    false;
+compare(array, [Hd|Tl], Payload) ->
     {Datatype, _Key, _Prefix, Value, Remainder} = pop(Payload),
     case encode(Datatype, Hd) of
         Value ->
-            compare(Tl, Remainder);
+            compare(array, Tl, Remainder);
         _ ->
             false
     end.
