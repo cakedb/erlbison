@@ -112,6 +112,7 @@ get_value(?BSON_DOUBLE, Payload) ->
 get_value(?BSON_STRING, Payload) ->
     {<<Length:32/little-integer>>, Value, Remainder} = chop(exclusive, 32, Payload),
     Size = Length-1,
+    io:format(user, "~nin get value: ~p~n", [Value]),
     <<String:Size/binary, 0>> = Value,
     {<<Size:32/little-integer>>, String, Remainder};
 get_value(?BSON_DOCUMENT, Payload) ->
@@ -273,7 +274,7 @@ pop(<<0>>) ->
 pop(<<Datatype, Payload/binary>>) ->
     {Key, Rest} = get_key(Payload),
     {Prefix, Value, Remainder} = get_value(Datatype, Rest),
-    io:format(user, "~n~p ~p~n", [Datatype, Value]),
+    io:format(user, "~nIn pop: ~p ~p~n", [Datatype, Value]),
     {Datatype, Key, Prefix, Value, Remainder}.
 
 % validate/2 returns a boolean whether a binary
