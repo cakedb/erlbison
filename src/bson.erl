@@ -111,10 +111,7 @@ get_value(?BSON_DOUBLE, Payload) ->
     chop(8, Payload);
 get_value(?BSON_STRING, Payload) ->
     {<<Length:32/little-integer>>, Value, Remainder} = chop(exclusive, 32, Payload),
-    Size = Length-1,
-    io:format(user, "~nin get value: ~p~n", [Value]),
-    <<String:Size/binary, 0>> = Value,
-    {<<Size:32/little-integer>>, String, Remainder};
+    {<<>>, <<Length:32/little-integer, Value/binary>>, Remainder};
 get_value(?BSON_DOCUMENT, Payload) ->
     {Prefix, Value, Remainder} = chop(inclusive, 32, Payload),
     {<<>>, <<Prefix/binary, Value/binary>>, Remainder};
@@ -214,36 +211,38 @@ decode(?BSON_MINKEY, _Value) ->
 decode(?BSON_MAXKEY, _Value) ->
     maxkey;
 decode(_, _Value) ->
-    error.
+    {error, decoding_error}.
 
 % encode/2 takes an integer representing
 % a BSON datatype as well a value 
 % represented inside a native Erlang
 % datatype and encode it to a binary
 % according to the BSON specs
-encode(?BSON_DOUBLE, Value) ->
+encode(?BSON_DOUBLE, Value) when is_integer(Value) or is_float(Value) ->
     <<Value:64/little-signed-float>>;
-encode(?BSON_STRING, Value) ->
+encode(?BSON_STRING, Value) when is_list(Value) ->
+    Length = string:len(Value) + 1,
     BitString = list_to_binary(Value),
-    <<BitString/binary,0>>;
-encode(?BSON_BINARY, Value) ->
+    <<Length:32/little-integer, BitString/binary,0>>;
+encode(?BSON_BINARY, Value) when is_bitstring(Value) ->
     Value;
-encode(?BSON_OBJECTID, Value) ->
+encode(?BSON_OBJECTID, Value) when is_bitstring(Value) ->
     Value;
 encode(?BSON_BOOL, false) ->
     <<0>>;
 encode(?BSON_BOOL, true) ->
     <<1>>;
-encode(?BSON_DATETIME, Value) ->
+encode(?BSON_DATETIME, Value) when is_integer(Value) ->
     <<Value:64/little-signed-integer>>;
 encode(?BSON_NULL, _) ->
     <<>>;
-encode(?BSON_REGEX, Value) ->
+encode(?BSON_REGEX, Value) when is_list(Value) ->
     list_to_binary(Value);
-encode(?BSON_JSCODE, Value) ->
+encode(?BSON_JSCODE, Value) when is_list(Value) ->
     Code = list_to_binary(Value),
     <<Code/binary,0>>;
-encode(?BSON_JSCODEWS, {Code, ScopeID, ScopeValue}) ->
+encode(?BSON_JSCODEWS, JSCodeWS = {Code, ScopeID, ScopeValue})
+        when is_tuple(JSCodeWS) and is_list(Code) and is_list(ScopeID) and is_list(ScopeValue) ->
     CodeBinary = list_to_binary(Code),
     LengthCode = size(CodeBinary) + 1,
     ScopeIDBinary = list_to_binary(ScopeID),
@@ -252,16 +251,19 @@ encode(?BSON_JSCODEWS, {Code, ScopeID, ScopeValue}) ->
     Temp = <<2, ScopeIDBinary/binary, 0, LengthValue:32/little-integer, ScopeValueBinary/binary, 0, 0>>,
     Length = size(Temp) + 4,
     <<LengthCode:32/little-integer, CodeBinary/binary, 0, Length:32/little-integer, Temp/binary>>;
-encode(?BSON_INT32, Value) ->
+encode(?BSON_INT32, Value) when is_integer(Value) ->
     <<Value:32/little-signed-integer>>;
-encode(?BSON_TS, {Increment, Seconds}) ->
+encode(?BSON_TS, Timestamp = {Increment, Seconds})
+        when is_tuple(Timestamp) and is_integer(Increment) and is_integer(Seconds) ->
     <<Increment:32/little-integer, Seconds:32/little-integer>>;
-encode(?BSON_INT64, Value) ->
+encode(?BSON_INT64, Value) when is_integer(Value) ->
     <<Value:64/little-signed-integer>>;
 encode(?BSON_MINKEY, _) ->
     <<>>;
 encode(?BSON_MAXKEY, _) ->
-    <<>>.
+    <<>>;
+encode(_, _) ->
+    {error, encoding_error}.
 
 % pop takes a single element off the payload
 % binary and returns a 5-tuple of the binary
@@ -274,7 +276,6 @@ pop(<<0>>) ->
 pop(<<Datatype, Payload/binary>>) ->
     {Key, Rest} = get_key(Payload),
     {Prefix, Value, Remainder} = get_value(Datatype, Rest),
-    io:format(user, "~nIn pop: ~p ~p~n", [Datatype, Value]),
     {Datatype, Key, Prefix, Value, Remainder}.
 
 % validate/2 returns a boolean whether a binary
@@ -370,10 +371,11 @@ compare(document, _KeyValues, <<0>>) ->
 compare(document, [], _Payload) ->
     false;
 compare(document, KeyValues, Payload) ->
-    {_Datatype, Key, _Prefix, Value, Remainder} = pop(Payload),
-    case lists:member({Key, Value}, KeyValues) of
+    {Datatype, Key, _Prefix, Value, Remainder} = pop(Payload),
+    KeyValue = {binary_to_list(Key), decode(Datatype, Value)},
+    case lists:member(KeyValue, KeyValues) of
         true ->
-            compare(document, lists:delete({Key, Value}, KeyValues), Remainder);
+            compare(document, lists:delete(KeyValue, KeyValues), Remainder);
         false ->
             false
     end;

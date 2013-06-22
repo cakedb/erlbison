@@ -139,6 +139,8 @@ instantiator(_) ->
     Query98 = bson:search(Bson, [{"some_int",fun(X)->X<0 end},{"some_double",fun(X)->X==-233.22 end}]),
     Query99 = bson:search(Bson, [{"some_garbage",fun(_X)->true end}]),
     Query100 = bson:search(Bson, [{"some_int",fun(X)->X rem 2 == 0 end}]),
+    WrongType1 = bson:search(Bson, [{"some_string" , true}]), 
+    WrongType2 = bson:search(Bson, [{"some_string" , -132.23}]), 
 
     % Search - Matches
     Query77 = bson:search(Bson, []),
@@ -171,14 +173,15 @@ instantiator(_) ->
 
     Query102 = bson:search(Bson, [{"some_string" , fun(X)->string:len(X)==10 end}]),
 
-    Query103 = bson:search(Bson, [{"some_document" , fun(X)->proplists:is_defined("some_document",X) end}]),
+    Query103 = bson:search(Bson, [{"some_document" , fun(X)->proplists:is_defined("nested",X) end}]),
 
-    Query104 = bson:search(Bson, [{"some_array" , fun(X) -> lists:nth(0, X) =< 0.5 end}]),
+    Query104 = bson:search(Bson, [{"some_array" , fun(X) -> lists:nth(1, X) =< 1.5 end}]),
 
     Query105 = bson:search(Bson, [{"some_other_datetime" , fun(X)->X>557460184000 end}]),
 
     Query106 = bson:search(Bson, [{"some_int32" , fun(X)->X<2 end}]),
-    Query107 = bson:search(Bson, [{"some_other_array" , fun(X)->lists:nth(8, X) rem 2 == 0 end}]),
+    Query107 = bson:search(Bson, [{"some_other_array" , fun(X)->lists:nth(9, X) rem 2 == 0 end}]),
+    Query108 = bson:search(Bson, [{"some_bool" , fun(X)->X end}, {"some_int64", 3000000000}]),
 
     [
         ?_assertEqual(Query1, false),
@@ -276,6 +279,8 @@ instantiator(_) ->
         ?_assertEqual(Query98, ?EMPTY_BSON),
         ?_assertEqual(Query99, ?EMPTY_BSON),
         ?_assertEqual(Query100, ?EMPTY_BSON),
+        ?_assertEqual(WrongType1, ?EMPTY_BSON),
+        ?_assertEqual(WrongType2, ?EMPTY_BSON),
         
         % Matches - search
         ?_assertEqual(Query77, Bson),
@@ -310,7 +315,8 @@ instantiator(_) ->
         ?_assertEqual(Query104, Bson),
         ?_assertEqual(Query105, Bson),
         ?_assertEqual(Query106, Bson),
-        ?_assertEqual(Query107, Bson)
+        ?_assertEqual(Query107, Bson),
+        ?_assertEqual(Query108, Bson)
     ].
         
 cakedb_driver_test_() ->
