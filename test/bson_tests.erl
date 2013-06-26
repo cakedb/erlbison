@@ -130,14 +130,19 @@ instantiator(_) ->
     Query69 = bson:validate(Query68),
     Query70 = bson:parse(Query68),
 
-    % No match
+    % Search - No match
     Query71 = bson:search(Bson, [{"some_int",1}, {"some_double",-233.22}]),
     Query72 = bson:search(Bson, [{"some_garbage",1}]),
     Query73 = bson:search(Bson, [{"some_int",3}]),
     Shorter = bson:search(Bson, [{"some_other_array",[0,1,2,3,4,5,6,7,8,9,10,11]}]),
     Longer = bson:search(Bson, [{"some_other_array",[0,1,2,3,4,5,6,7,8,9,10,11,12,13]}]),
+    Query98 = bson:search(Bson, [{"some_int",fun(X)->X<0 end},{"some_double",fun(X)->X==-233.22 end}]),
+    Query99 = bson:search(Bson, [{"some_garbage",fun(_X)->true end}]),
+    Query100 = bson:search(Bson, [{"some_int",fun(X)->X rem 2 == 0 end}]),
+    WrongType1 = bson:search(Bson, [{"some_string" , true}]), 
+    WrongType2 = bson:search(Bson, [{"some_string" , -132.23}]), 
 
-    % Matches
+    % Search - Matches
     Query77 = bson:search(Bson, []),
     Query78 = bson:search(Bson, [{"some_double" , 87363.343425}]),
     Query79 = bson:search(Bson, [{"some_string" , "HelloWorld"}]),
@@ -163,6 +168,20 @@ instantiator(_) ->
     Query95 = bson:search(Bson, [{"some_minkey" , minkey}]),
     Query96 = bson:search(Bson, [{"some_maxkey" , maxkey}]),
     Query97 = bson:search(Bson, [{"some_int32" , 1}, {"some_int64", 3000000000}]),
+
+    Query101 = bson:search(Bson, [{"some_double" , fun(X)->X>10000 end}]),
+
+    Query102 = bson:search(Bson, [{"some_string" , fun(X)->string:len(X)==10 end}]),
+
+    Query103 = bson:search(Bson, [{"some_document" , fun(X)->proplists:is_defined("nested",X) end}]),
+
+    Query104 = bson:search(Bson, [{"some_array" , fun(X) -> lists:nth(1, X) =< 1.5 end}]),
+
+    Query105 = bson:search(Bson, [{"some_other_datetime" , fun(X)->X>557460184000 end}]),
+
+    Query106 = bson:search(Bson, [{"some_int32" , fun(X)->X<2 end}]),
+    Query107 = bson:search(Bson, [{"some_other_array" , fun(X)->lists:nth(9, X) rem 2 == 0 end}]),
+    Query108 = bson:search(Bson, [{"some_bool" , fun(X)->X end}, {"some_int64", 3000000000}]),
 
     [
         ?_assertEqual(Query1, false),
@@ -257,6 +276,11 @@ instantiator(_) ->
         ?_assertEqual(Query73, ?EMPTY_BSON),
         ?_assertEqual(Shorter, ?EMPTY_BSON),
         ?_assertEqual(Longer, ?EMPTY_BSON),
+        ?_assertEqual(Query98, ?EMPTY_BSON),
+        ?_assertEqual(Query99, ?EMPTY_BSON),
+        ?_assertEqual(Query100, ?EMPTY_BSON),
+        ?_assertEqual(WrongType1, ?EMPTY_BSON),
+        ?_assertEqual(WrongType2, ?EMPTY_BSON),
         
         % Matches - search
         ?_assertEqual(Query77, Bson),
@@ -283,7 +307,16 @@ instantiator(_) ->
         ?_assertEqual(Query94, Bson),
         ?_assertEqual(Query95, Bson),
         ?_assertEqual(Query96, Bson),
-        ?_assertEqual(Query97, Bson)
+        ?_assertEqual(Query97, Bson),
+
+        ?_assertEqual(Query101, Bson),
+        ?_assertEqual(Query102, Bson),
+        ?_assertEqual(Query103, Bson),
+        ?_assertEqual(Query104, Bson),
+        ?_assertEqual(Query105, Bson),
+        ?_assertEqual(Query106, Bson),
+        ?_assertEqual(Query107, Bson),
+        ?_assertEqual(Query108, Bson)
     ].
         
 cakedb_driver_test_() ->

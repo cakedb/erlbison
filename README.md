@@ -27,9 +27,13 @@ returns a native Erlang proplist with the parsed content of BSON binary Foo.
 returns a subset of FOO (a proper BSON binary) that contains strictly the elements identified by
 the keys contained in the list in the second argument of `bson:filter/2`.
 
-`Foo = bson:search(Foo, [{Key1, Value1}, ..., {KeyN, ValueN}]).`
+`Foo = bson:search(Foo, [{Key1, Comparator1}, ..., {KeyN, ComparatorN}]).`
 
-returns the BSON Foo if and only if it contains all the key-value pairs listed in its second argument.
+where ComparatorX are either values or higher order functions. In the later case,
+Comparator case MUST have an arity of one and returns a boolean (i.e. either the
+atom true or false). bson:search/2 then returns the BSON Foo if and only if it
+contains all the key-value pairs and satisfies all the comparators functions
+listed in its second argument.
 
 ## Test suite
 
