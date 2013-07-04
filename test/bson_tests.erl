@@ -319,7 +319,7 @@ instantiator(_) ->
         ?_assertEqual(Query108, Bson)
     ].
         
-cakedb_driver_test_() ->
+bson_test_() ->
     {setup,
      fun start/0,
      fun stop/1,
