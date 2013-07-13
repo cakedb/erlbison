@@ -50,5 +50,4 @@ Comprehensive Eunit tests can be run by running these commands from the root fol
 ## TODO
 
 * More thorough testing, especially with JSCODEWS type
-* "In"-documents searches
 
